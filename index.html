@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
+  <title>CodeMirror iOS Korean IME Test</title>
+  <style>
+    :root {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color-scheme: light dark;
+    }
+    body {
+      margin: 0;
+      padding: 16px;
+      line-height: 1.45;
+    }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    h2 { font-size: 16px; margin: 20px 0 8px; }
+    .card {
+      border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    select, button, input {
+      font: inherit;
+      min-height: 40px;
+      padding: 8px 10px;
+    }
+    button { cursor: pointer; }
+    .metric {
+      flex: 1 1 120px;
+      border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .metric strong {
+      display: block;
+      font-size: 24px;
+      margin-top: 4px;
+    }
+    .test-string {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      user-select: all;
+    }
+    #editor {
+      border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+      border-radius: 10px;
+      min-height: 180px;
+      font-size: 24px;
+      overflow: hidden;
+    }
+    .cm-editor { min-height: 180px; }
+    .cm-content { min-height: 180px; }
+    .CodeMirror {
+      min-height: 180px;
+      height: auto;
+      font-size: 24px;
+      border-radius: 10px;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+      max-height: 320px;
+      overflow: auto;
+      border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+      border-radius: 10px;
+      padding: 10px;
+      margin: 0;
+    }
+    .muted { opacity: .7; font-size: 13px; }
+    .danger { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>CodeMirror iOS Korean IME Test</h1>
+
+  <div class="card">
+    <div class="row">
+      <label for="version">CodeMirror View</label>
+      <select id="version">
+        <optgroup label="CodeMirror 5">
+          <option>5.65.4</option>
+          <option>5.65.10</option>
+          <option>5.65.16</option>
+        </optgroup>
+        <optgroup label="CodeMirror 6">
+          <option>6.42.1</option>
+          <option>6.43.1</option>
+          <option>6.43.4</option>
+          <option>6.43.9</option>
+          <option>6.43.10</option>
+          <option selected>6.43.11</option>
+        </optgroup>
+      </select>
+      <button id="loadVersion">Load version</button>
+    </div>
+    <div class="muted" id="loadedVersion">Loading…</div>
+  </div>
+
+  <div class="card">
+    <div>Test sequence</div>
+    <div class="test-string">백두산이</div>
+    <div class="muted">Danmoum keys: ㅂ → ㅐ → ㄱ → ㄷ → ㅜ → ㅅ → ㅏ → ㄴ → ㅇ → ㅣ</div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="metric">Attempts<strong id="attempts">0</strong></div>
+      <div class="metric">Failures<strong id="failures">0</strong></div>
+      <div class="metric">Rate<strong id="rate">0%</strong></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="addAttempt">+ Attempt</button>
+      <button id="addFailure">+ Failure</button>
+      <button id="undo">Undo count</button>
+      <button id="reset">Reset</button>
+    </div>
+  </div>
+
+  <h2>Editor</h2>
+  <div id="editor"></div>
+
+  <div class="row" style="margin:10px 0 20px">
+    <button id="clearEditor">Clear editor</button>
+    <button id="copySummary">Copy summary</button>
+  </div>
+
+  <h2>Input event log</h2>
+  <div class="row" style="margin-bottom:8px">
+    <button id="clearLog">Clear log</button>
+    <button id="copyLog">Copy log</button>
+  </div>
+  <pre id="log"></pre>
+
+  <script type="module">
+    const qs = new URLSearchParams(location.search);
+    const versionSelect = document.querySelector("#version");
+    const requestedVersion = qs.get("v") || "6.43.11";
+    if ([...versionSelect.options].some(o => o.value === requestedVersion)) {
+      versionSelect.value = requestedVersion;
+    }
+
+    document.querySelector("#loadVersion").onclick = () => {
+      const v = versionSelect.value;
+      const url = new URL(location.href);
+      url.searchParams.set("v", v);
+      location.href = url.toString();
+    };
+
+    let attempts = Number(localStorage.getItem("cm-ime-attempts") || 0);
+    let failures = Number(localStorage.getItem("cm-ime-failures") || 0);
+    const history = [];
+
+    function renderCounts() {
+      document.querySelector("#attempts").textContent = attempts;
+      document.querySelector("#failures").textContent = failures;
+      document.querySelector("#rate").textContent =
+        attempts ? `${((failures / attempts) * 100).toFixed(1)}%` : "0%";
+      localStorage.setItem("cm-ime-attempts", attempts);
+      localStorage.setItem("cm-ime-failures", failures);
+    }
+
+    document.querySelector("#addAttempt").onclick = () => {
+      history.push([attempts, failures]);
+      attempts++;
+      renderCounts();
+    };
+    document.querySelector("#addFailure").onclick = () => {
+      history.push([attempts, failures]);
+      attempts++;
+      failures++;
+      renderCounts();
+    };
+    document.querySelector("#undo").onclick = () => {
+      const prev = history.pop();
+      if (!prev) return;
+      [attempts, failures] = prev;
+      renderCounts();
+    };
+    document.querySelector("#reset").onclick = () => {
+      history.push([attempts, failures]);
+      attempts = 0;
+      failures = 0;
+      renderCounts();
+    };
+    renderCounts();
+
+    const log = document.querySelector("#log");
+    const t0 = performance.now();
+    function appendLog(type, data = {}) {
+      const ms = (performance.now() - t0).toFixed(1).padStart(8);
+      log.textContent += `${ms}  ${type} ${JSON.stringify(data)}\n`;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    const viewVersion = versionSelect.value;
+    const isCM5 = viewVersion.startsWith("5.");
+
+    document.querySelector("#loadedVersion").textContent =
+      `Loading CodeMirror ${viewVersion}…`;
+
+    window.addEventListener("error", (e) => {
+      document.querySelector("#loadedVersion").innerHTML =
+        `<span class="danger">JavaScript error: ${e.message || "unknown error"}</span>`;
+    });
+
+    window.addEventListener("unhandledrejection", (e) => {
+      document.querySelector("#loadedVersion").innerHTML =
+        `<span class="danger">Module load error: ${String(e.reason || "unknown error")}</span>`;
+    });
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.head.appendChild(s);
+      });
+    }
+
+    function loadCss(href) {
+      return new Promise((resolve, reject) => {
+        const l = document.createElement("link");
+        l.rel = "stylesheet";
+        l.href = href;
+        l.onload = resolve;
+        l.onerror = () => reject(new Error(`Failed to load ${href}`));
+        document.head.appendChild(l);
+      });
+    }
+
+    try {
+      let getDocText;
+      let clearEditorImpl;
+      let focusEditorImpl;
+      let contentDOM;
+      let getSelectionInfo;
+      let moduleDescription;
+
+      if (isCM5) {
+        const base = `https://cdnjs.cloudflare.com/ajax/libs/codemirror/${viewVersion}`;
+        await Promise.all([
+          loadCss(`${base}/codemirror.min.css`),
+          loadScript(`${base}/codemirror.min.js`)
+        ]);
+
+        const textarea = document.createElement("textarea");
+        textarea.id = "cm5-source";
+        document.querySelector("#editor").appendChild(textarea);
+
+        const cm = window.CodeMirror.fromTextArea(textarea, {
+          lineNumbers: false,
+          lineWrapping: true,
+          inputStyle: "contenteditable"
+        });
+
+        contentDOM = cm.getWrapperElement().querySelector(".CodeMirror-code") ||
+                     cm.getWrapperElement();
+        getDocText = () => cm.getValue();
+        getSelectionInfo = () => {
+          const from = cm.getCursor("from");
+          const to = cm.getCursor("to");
+          return {from, to};
+        };
+        clearEditorImpl = () => {
+          cm.setValue("");
+          cm.focus();
+        };
+        focusEditorImpl = () => cm.focus();
+        moduleDescription = `cdnjs CodeMirror ${viewVersion}`;
+      } else {
+        const viewUrl = `https://esm.sh/@codemirror/view@${viewVersion}?bundle`;
+        const {EditorView} = await import(viewUrl);
+
+        const view = new EditorView({
+          doc: "",
+          parent: document.querySelector("#editor")
+        });
+
+        contentDOM = view.contentDOM;
+        getDocText = () => view.state.doc.toString();
+        getSelectionInfo = () => ({
+          from: view.state.selection.main.from,
+          to: view.state.selection.main.to
+        });
+        clearEditorImpl = () => {
+          view.dispatch({
+            changes: {from: 0, to: view.state.doc.length, insert: ""}
+          });
+          view.focus();
+        };
+        focusEditorImpl = () => view.focus();
+        moduleDescription = viewUrl;
+      }
+
+      document.querySelector("#loadedVersion").textContent =
+        `Loaded CodeMirror ${viewVersion}`;
+
+      function rangeInfo(e) {
+        if (!e.getTargetRanges) return [];
+        try {
+          return [...e.getTargetRanges()].map(r => ({
+            startOffset: r.startOffset,
+            endOffset: r.endOffset,
+            collapsed: r.collapsed,
+            startNode: r.startContainer?.nodeName,
+            endNode: r.endContainer?.nodeName
+          }));
+        } catch {
+          return [];
+        }
+      }
+
+      contentDOM.addEventListener("beforeinput", e => {
+        appendLog("beforeinput", {
+          inputType: e.inputType,
+          data: e.data,
+          isComposing: e.isComposing,
+          targetRanges: rangeInfo(e),
+          doc: getDocText(),
+          selection: getSelectionInfo()
+        });
+      }, true);
+
+      contentDOM.addEventListener("input", e => {
+        appendLog("input", {
+          inputType: e.inputType,
+          data: e.data,
+          isComposing: e.isComposing,
+          doc: getDocText()
+        });
+      }, true);
+
+      for (const type of ["compositionstart","compositionupdate","compositionend"]) {
+        contentDOM.addEventListener(type, e => {
+          appendLog(type, {
+            data: e.data,
+            doc: getDocText()
+          });
+        }, true);
+      }
+
+      document.addEventListener("selectionchange", () => {
+        const sel = document.getSelection();
+        if (!sel) return;
+        appendLog("selectionchange", {
+          anchorOffset: sel.anchorOffset,
+          focusOffset: sel.focusOffset,
+          isCollapsed: sel.isCollapsed
+        });
+      });
+
+      document.querySelector("#clearEditor").onclick = () => {
+        clearEditorImpl();
+      };
+
+      document.querySelector("#copySummary").onclick = async () => {
+        const text =
+`CodeMirror iOS Korean IME test
+CodeMirror: ${viewVersion}
+Attempts: ${attempts}
+Failures: ${failures}
+Rate: ${attempts ? ((failures/attempts)*100).toFixed(1) : 0}%
+Test: 백두산이
+Keyboard layout: Danmoum`;
+        await navigator.clipboard.writeText(text);
+      };
+
+      document.querySelector("#copyLog").onclick = async () => {
+        await navigator.clipboard.writeText(log.textContent);
+      };
+      document.querySelector("#clearLog").onclick = () => {
+        log.textContent = "";
+      };
+
+      appendLog("ready", {
+        version: viewVersion,
+        generation: isCM5 ? 5 : 6,
+        source: moduleDescription
+      });
+
+      focusEditorImpl();
+    } catch (err) {
+      document.querySelector("#loadedVersion").innerHTML =
+        `<span class="danger">Failed to load ${viewVersion}: ${String(err)}</span>`;
+      appendLog("load-error", {message: String(err)});
+    }
+  </script>
+</body>
+</html>
