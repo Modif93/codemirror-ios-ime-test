@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
-  <title>CodeMirror iOS Korean IME Test</title>
+  <title>CodeMirror iOS Korean IME Test - Enhanced CM5 Logger</title>
   <style>
     :root {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -83,6 +83,7 @@
 </head>
 <body>
   <h1>CodeMirror iOS Korean IME Test</h1>
+  <div class="muted">Enhanced CM5 logger: document capture + composedPath + CM5 change hooks</div>
 
   <div class="card">
     <div class="row">
@@ -248,11 +249,14 @@
       let getSelectionInfo;
       let moduleDescription;
 
+      let cm5Instance = null;
+      let cm5Wrapper = null;
+
       if (isCM5) {
-        const base = `https://cdnjs.cloudflare.com/ajax/libs/codemirror/${viewVersion}`;
+        const base = `https://cdn.jsdelivr.net/npm/codemirror@${viewVersion}`;
         await Promise.all([
-          loadCss(`${base}/codemirror.min.css`),
-          loadScript(`${base}/codemirror.min.js`)
+          loadCss(`${base}/lib/codemirror.css`),
+          loadScript(`${base}/lib/codemirror.js`)
         ]);
 
         const textarea = document.createElement("textarea");
@@ -265,8 +269,17 @@
           inputStyle: "contenteditable"
         });
 
-        contentDOM = cm.getWrapperElement().querySelector(".CodeMirror-code") ||
-                     cm.getWrapperElement();
+        cm5Instance = cm;
+        cm5Wrapper = cm.getWrapperElement();
+
+        // Keep a local target for CM5, but actual event logging is also
+        // installed at document capture phase below so hidden/internal
+        // input targets cannot escape the logger.
+        contentDOM =
+          cm5Wrapper.querySelector(".CodeMirror-code") ||
+          cm5Wrapper.querySelector("[contenteditable=true]") ||
+          cm5Wrapper;
+
         getDocText = () => cm.getValue();
         getSelectionInfo = () => {
           const from = cm.getCursor("from");
@@ -278,9 +291,9 @@
           cm.focus();
         };
         focusEditorImpl = () => cm.focus();
-        moduleDescription = `cdnjs CodeMirror ${viewVersion}`;
+        moduleDescription = `jsDelivr CodeMirror ${viewVersion}`;
       } else {
-        const viewUrl = `https://esm.sh/@codemirror/view@${viewVersion}?bundle`;
+        const viewUrl = `https://cdn.jsdelivr.net/npm/@codemirror/view@${viewVersion}/+esm`;
         const {EditorView} = await import(viewUrl);
 
         const view = new EditorView({
@@ -301,7 +314,7 @@
           view.focus();
         };
         focusEditorImpl = () => view.focus();
-        moduleDescription = viewUrl;
+        moduleDescription = `jsDelivr ESM: ${viewUrl}`;
       }
 
       document.querySelector("#loadedVersion").textContent =
@@ -315,49 +328,167 @@
             endOffset: r.endOffset,
             collapsed: r.collapsed,
             startNode: r.startContainer?.nodeName,
-            endNode: r.endContainer?.nodeName
+            endNode: r.endContainer?.nodeName,
+            startClass: r.startContainer?.parentElement?.className || null,
+            endClass: r.endContainer?.parentElement?.className || null
           }));
         } catch {
           return [];
         }
       }
 
-      contentDOM.addEventListener("beforeinput", e => {
-        appendLog("beforeinput", {
-          inputType: e.inputType,
-          data: e.data,
-          isComposing: e.isComposing,
+      function nodeDesc(node) {
+        if (!node) return null;
+        if (node.nodeType === Node.TEXT_NODE) {
+          const p = node.parentElement;
+          return `#text${p ? ` <${p.tagName.toLowerCase()}.${String(p.className || "").replace(/\s+/g, ".")}>` : ""}`;
+        }
+        if (!(node instanceof Element)) return node.nodeName || String(node);
+        const id = node.id ? `#${node.id}` : "";
+        const cls = node.className && typeof node.className === "string"
+          ? "." + node.className.trim().replace(/\s+/g, ".")
+          : "";
+        return `${node.tagName.toLowerCase()}${id}${cls}`;
+      }
+
+      function eventPathInfo(e) {
+        try {
+          return e.composedPath()
+            .slice(0, 12)
+            .map(nodeDesc)
+            .filter(Boolean);
+        } catch {
+          return [];
+        }
+      }
+
+      function domSelectionInfo() {
+        const sel = document.getSelection();
+        if (!sel) return null;
+        return {
+          anchorNode: nodeDesc(sel.anchorNode),
+          anchorOffset: sel.anchorOffset,
+          focusNode: nodeDesc(sel.focusNode),
+          focusOffset: sel.focusOffset,
+          isCollapsed: sel.isCollapsed
+        };
+      }
+
+      function belongsToEditor(e) {
+        const path = e.composedPath ? e.composedPath() : [];
+        if (isCM5) {
+          return path.includes(cm5Wrapper) ||
+                 path.some(n => n instanceof Element &&
+                   (n === cm5Wrapper || cm5Wrapper?.contains(n)));
+        }
+        return path.includes(contentDOM) ||
+               path.some(n => n instanceof Element &&
+                 (n === contentDOM || contentDOM?.contains(n)));
+      }
+
+      function logInputEvent(e, phase = "capture") {
+        if (!belongsToEditor(e)) return;
+
+        appendLog(`${e.type}:${phase}`, {
+          target: nodeDesc(e.target),
+          currentTarget: nodeDesc(e.currentTarget),
+          inputType: "inputType" in e ? e.inputType : undefined,
+          data: "data" in e ? e.data : undefined,
+          isComposing: "isComposing" in e ? e.isComposing : undefined,
+          defaultPrevented: e.defaultPrevented,
+          cancelable: e.cancelable,
           targetRanges: rangeInfo(e),
+          path: eventPathInfo(e),
           doc: getDocText(),
-          selection: getSelectionInfo()
+          editorSelection: getSelectionInfo(),
+          domSelection: domSelectionInfo()
         });
-      }, true);
+      }
 
-      contentDOM.addEventListener("input", e => {
-        appendLog("input", {
-          inputType: e.inputType,
-          data: e.data,
-          isComposing: e.isComposing,
-          doc: getDocText()
-        });
-      }, true);
+      // Most important CM5 improvement:
+      // capture input-related events at document level so CodeMirror 5's
+      // internal input node / hidden textarea / contenteditable path is visible.
+      const inputEventTypes = [
+        "beforeinput",
+        "input",
+        "compositionstart",
+        "compositionupdate",
+        "compositionend",
+        "keydown",
+        "keyup"
+      ];
 
-      for (const type of ["compositionstart","compositionupdate","compositionend"]) {
-        contentDOM.addEventListener(type, e => {
-          appendLog(type, {
-            data: e.data,
-            doc: getDocText()
+      for (const type of inputEventTypes) {
+        document.addEventListener(type, e => logInputEvent(e, "document-capture"), true);
+      }
+
+      // Also keep an editor-local capture listener. This helps compare whether
+      // an event reached the visible editing DOM in CM5/CM6.
+      for (const type of inputEventTypes) {
+        contentDOM.addEventListener(type, e => logInputEvent(e, "editor-capture"), true);
+      }
+
+      // CM5-specific state hooks. These do not replace DOM event logging, but
+      // help correlate CodeMirror's internal document/selection updates.
+      if (isCM5 && cm5Instance) {
+        cm5Instance.on("beforeChange", (instance, change) => {
+          appendLog("cm5:beforeChange", {
+            from: change.from,
+            to: change.to,
+            text: change.text,
+            origin: change.origin,
+            doc: instance.getValue(),
+            selection: getSelectionInfo(),
+            domSelection: domSelectionInfo()
           });
-        }, true);
+        });
+
+        cm5Instance.on("change", (instance, change) => {
+          appendLog("cm5:change", {
+            from: change.from,
+            to: change.to,
+            text: change.text,
+            removed: change.removed,
+            origin: change.origin,
+            doc: instance.getValue(),
+            selection: getSelectionInfo(),
+            domSelection: domSelectionInfo()
+          });
+        });
+
+        cm5Instance.on("cursorActivity", instance => {
+          appendLog("cm5:cursorActivity", {
+            doc: instance.getValue(),
+            selection: getSelectionInfo(),
+            domSelection: domSelectionInfo()
+          });
+        });
       }
 
       document.addEventListener("selectionchange", () => {
         const sel = document.getSelection();
         if (!sel) return;
+
+        // Avoid logging unrelated selection changes outside the editor.
+        const anchorEl = sel.anchorNode?.nodeType === Node.TEXT_NODE
+          ? sel.anchorNode.parentElement
+          : sel.anchorNode;
+        const focusEl = sel.focusNode?.nodeType === Node.TEXT_NODE
+          ? sel.focusNode.parentElement
+          : sel.focusNode;
+
+        const inEditor = isCM5
+          ? ((anchorEl instanceof Node && cm5Wrapper?.contains(anchorEl)) ||
+             (focusEl instanceof Node && cm5Wrapper?.contains(focusEl)))
+          : ((anchorEl instanceof Node && contentDOM?.contains(anchorEl)) ||
+             (focusEl instanceof Node && contentDOM?.contains(focusEl)));
+
+        if (!inEditor) return;
+
         appendLog("selectionchange", {
-          anchorOffset: sel.anchorOffset,
-          focusOffset: sel.focusOffset,
-          isCollapsed: sel.isCollapsed
+          ...domSelectionInfo(),
+          doc: getDocText(),
+          editorSelection: getSelectionInfo()
         });
       });
 
@@ -392,9 +523,12 @@ Keyboard layout: Danmoum`;
 
       focusEditorImpl();
     } catch (err) {
+      const attempted = isCM5
+        ? `https://cdn.jsdelivr.net/npm/codemirror@${viewVersion}`
+        : `https://cdn.jsdelivr.net/npm/@codemirror/view@${viewVersion}/+esm`;
       document.querySelector("#loadedVersion").innerHTML =
-        `<span class="danger">Failed to load ${viewVersion}: ${String(err)}</span>`;
-      appendLog("load-error", {message: String(err)});
+        `<span class="danger">Failed to load ${viewVersion}: ${String(err)}<br>URL: ${attempted}</span>`;
+      appendLog("load-error", {message: String(err), attempted});
     }
   </script>
 </body>
