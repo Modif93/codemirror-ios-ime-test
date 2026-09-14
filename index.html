@@ -3,128 +3,69 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
-  <title>CodeMirror iOS Korean IME Test - Enhanced CM5 Logger</title>
+  <title>CodeMirror iOS Korean IME Test v5</title>
   <style>
-    :root {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color-scheme: light dark;
-    }
-    body {
-      margin: 0;
-      padding: 16px;
-      line-height: 1.45;
-    }
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color-scheme: light dark; }
+    body { margin: 0; padding: 16px; line-height: 1.45; }
     h1 { font-size: 20px; margin: 0 0 12px; }
     h2 { font-size: 16px; margin: 20px 0 8px; }
-    .card {
-      border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-      border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 12px;
-    }
-    .row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    select, button, input {
-      font: inherit;
-      min-height: 40px;
-      padding: 8px 10px;
-    }
+    .card { border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    select, button, input { font: inherit; min-height: 40px; padding: 8px 10px; }
     button { cursor: pointer; }
-    .metric {
-      flex: 1 1 120px;
-      border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
-      border-radius: 10px;
-      padding: 10px;
-    }
-    .metric strong {
-      display: block;
-      font-size: 24px;
-      margin-top: 4px;
-    }
-    .test-string {
-      font-size: 24px;
-      font-weight: 700;
-      letter-spacing: .02em;
-      user-select: all;
-    }
-    #editor {
-      border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-      border-radius: 10px;
-      min-height: 180px;
-      font-size: 24px;
-      overflow: hidden;
-    }
-    .cm-editor { min-height: 180px; }
-    .cm-content { min-height: 180px; }
-    .CodeMirror {
-      min-height: 180px;
-      height: auto;
-      font-size: 24px;
-      border-radius: 10px;
-    }
-    pre {
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      font-size: 12px;
-      max-height: 320px;
-      overflow: auto;
-      border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
-      border-radius: 10px;
-      padding: 10px;
-      margin: 0;
-    }
-    .muted { opacity: .7; font-size: 13px; }
+    .muted { opacity: .72; font-size: 13px; }
+    .warn { color: #c15b00; }
     .danger { color: #b00020; }
+    #editor { border: 1px solid color-mix(in srgb, currentColor 35%, transparent); border-radius: 10px; min-height: 180px; font-size: 24px; overflow: hidden; }
+    .cm-editor, .cm-content { min-height: 180px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; max-height: 380px; overflow: auto; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 10px; padding: 10px; margin: 0; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .pill { border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 999px; padding: 3px 8px; font-size: 12px; }
+    .spacer { height: 4px; }
   </style>
 </head>
 <body>
-  <h1>CodeMirror iOS Korean IME Test</h1>
-  <div class="muted">Enhanced CM5 logger: document capture + composedPath + CM5 change hooks</div>
+  <h1>CodeMirror iOS Korean IME Test v5</h1>
+  <div class="muted">Exact Bare vs Standard Bundled · logger off / buffer-only / deferred-live</div>
 
   <div class="card">
     <div class="row">
-      <label for="version">CodeMirror View</label>
-      <select id="version">
-        <optgroup label="CodeMirror 5">
-          <option>5.65.4</option>
-          <option>5.65.10</option>
-          <option>5.65.16</option>
-        </optgroup>
-        <optgroup label="CodeMirror 6">
-          <option>6.42.1</option>
-          <option>6.43.1</option>
-          <option>6.43.4</option>
-          <option>6.43.9</option>
-          <option>6.43.10</option>
-          <option selected>6.43.11</option>
-        </optgroup>
+      <label for="config">Configuration</label>
+      <select id="config">
+        <option value="bare" selected>Exact Bare (@codemirror/view only)</option>
+        <option value="standard">Standard Bundled (codemirror + basicSetup)</option>
       </select>
-      <button id="loadVersion">Load version</button>
+
+      <label for="version">View version</label>
+      <select id="version">
+        <option>6.42.1</option>
+        <option>6.43.1</option>
+        <option>6.43.4</option>
+        <option>6.43.5</option>
+        <option>6.43.9</option>
+        <option>6.43.10</option>
+        <option selected>6.43.11</option>
+      </select>
+
+      <label for="loggerMode">Logger</label>
+      <select id="loggerMode">
+        <option value="off">Off</option>
+        <option value="buffer" selected>Buffer only</option>
+        <option value="deferred">Deferred live</option>
+      </select>
+
+      <button id="loadEditor">Load editor</button>
     </div>
-    <div class="muted" id="loadedVersion">Loading…</div>
+
+    <div class="spacer"></div>
+    <div id="modeHelp" class="muted"></div>
+    <div id="loadedMeta" class="muted">Not loaded</div>
   </div>
 
   <div class="card">
-    <div>Test sequence</div>
-    <div class="test-string">백두산이</div>
-    <div class="muted">Danmoum keys: ㅂ → ㅐ → ㄱ → ㄷ → ㅜ → ㅅ → ㅏ → ㄴ → ㅇ → ㅣ</div>
-  </div>
-
-  <div class="card">
-    <div class="row">
-      <div class="metric">Attempts<strong id="attempts">0</strong></div>
-      <div class="metric">Failures<strong id="failures">0</strong></div>
-      <div class="metric">Rate<strong id="rate">0%</strong></div>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button id="addAttempt">+ Attempt</button>
-      <button id="addFailure">+ Failure</button>
-      <button id="undo">Undo count</button>
-      <button id="reset">Reset</button>
+    <div><strong>Recommended sequence</strong></div>
+    <div class="muted">
+      1) Standard + Logger Off → 2) Bare + Logger Off → 3) Standard + Buffer only → 4) Bare + Buffer only
     </div>
   </div>
 
@@ -133,403 +74,345 @@
 
   <div class="row" style="margin:10px 0 20px">
     <button id="clearEditor">Clear editor</button>
-    <button id="copySummary">Copy summary</button>
+    <span id="eventCount" class="pill">Buffered events: 0</span>
   </div>
 
   <h2>Input event log</h2>
   <div class="row" style="margin-bottom:8px">
-    <button id="clearLog">Clear log</button>
-    <button id="copyLog">Copy log</button>
+    <button id="renderLog">Render Log</button>
+    <button id="copyLog">Copy Log</button>
+    <button id="clearLog">Clear Log</button>
   </div>
   <pre id="log"></pre>
 
-  <script type="module">
-    const qs = new URLSearchParams(location.search);
-    const versionSelect = document.querySelector("#version");
-    const requestedVersion = qs.get("v") || "6.43.11";
-    if ([...versionSelect.options].some(o => o.value === requestedVersion)) {
-      versionSelect.value = requestedVersion;
-    }
+<script type="module">
+const qs = new URLSearchParams(location.search);
 
-    document.querySelector("#loadVersion").onclick = () => {
-      const v = versionSelect.value;
-      const url = new URL(location.href);
-      url.searchParams.set("v", v);
-      location.href = url.toString();
+const configEl = document.querySelector("#config");
+const versionEl = document.querySelector("#version");
+const loggerModeEl = document.querySelector("#loggerMode");
+const editorHost = document.querySelector("#editor");
+const loadedMeta = document.querySelector("#loadedMeta");
+const modeHelp = document.querySelector("#modeHelp");
+const eventCount = document.querySelector("#eventCount");
+const logEl = document.querySelector("#log");
+
+if (qs.get("config")) configEl.value = qs.get("config");
+if (qs.get("v") && [...versionEl.options].some(o => o.value === qs.get("v"))) versionEl.value = qs.get("v");
+if (qs.get("logger")) loggerModeEl.value = qs.get("logger");
+
+let currentView = null;
+let contentDOM = null;
+let buffer = [];
+let t0 = performance.now();
+let deferredTimer = null;
+let cleanupFns = [];
+
+function updateModeUi() {
+  const standard = configEl.value === "standard";
+  versionEl.disabled = standard;
+  modeHelp.textContent = standard
+    ? "Standard Bundled mode uses a single codemirror bundle. The exact @codemirror/view version is not controlled by this selector."
+    : "Exact Bare mode imports only the selected @codemirror/view package. No separate @codemirror/state package is imported.";
+}
+configEl.addEventListener("change", updateModeUi);
+updateModeUi();
+
+function stable(v) {
+  return v === undefined ? null : v;
+}
+
+function nodeDesc(node) {
+  if (!node) return null;
+  if (node.nodeType === Node.TEXT_NODE) {
+    const p = node.parentElement;
+    return `#text${p ? ` <${p.tagName.toLowerCase()}.${String(p.className || "").replace(/\s+/g, ".")}>` : ""}`;
+  }
+  if (!(node instanceof Element)) return node.nodeName || String(node);
+  const id = node.id ? `#${node.id}` : "";
+  const cls = node.className && typeof node.className === "string"
+    ? "." + node.className.trim().replace(/\s+/g, ".")
+    : "";
+  return `${node.tagName.toLowerCase()}${id}${cls}`;
+}
+
+function getDomSelectionInfo() {
+  const sel = document.getSelection();
+  if (!sel) return null;
+  return {
+    anchorNode: nodeDesc(sel.anchorNode),
+    anchorOffset: sel.anchorOffset,
+    focusNode: nodeDesc(sel.focusNode),
+    focusOffset: sel.focusOffset,
+    isCollapsed: sel.isCollapsed
+  };
+}
+
+function getEditorSelectionInfo() {
+  if (!currentView) return null;
+  const main = currentView.state.selection.main;
+  return { from: main.from, to: main.to };
+}
+
+function getDoc() {
+  return currentView ? currentView.state.doc.toString() : "";
+}
+
+function rangeInfo(e) {
+  if (!e.getTargetRanges) return [];
+  try {
+    return [...e.getTargetRanges()].map(r => ({
+      startOffset: r.startOffset,
+      endOffset: r.endOffset,
+      collapsed: r.collapsed,
+      startNode: r.startContainer?.nodeName ?? null,
+      endNode: r.endContainer?.nodeName ?? null
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function makeEventRecord(e, label) {
+  const isKeyboard = e instanceof KeyboardEvent;
+  return {
+    t: Number((performance.now() - t0).toFixed(1)),
+    label,
+    eventTimeStamp: Number.isFinite(e.timeStamp) ? Number(e.timeStamp.toFixed(3)) : stable(e.timeStamp),
+    type: e.type,
+    key: isKeyboard ? stable(e.key) : null,
+    code: isKeyboard ? stable(e.code) : null,
+    keyCode: isKeyboard ? stable(e.keyCode) : null,
+    charCode: isKeyboard ? stable(e.charCode) : null,
+    which: isKeyboard ? stable(e.which) : null,
+    repeat: isKeyboard ? stable(e.repeat) : null,
+    location: isKeyboard ? stable(e.location) : null,
+    altKey: isKeyboard ? !!e.altKey : null,
+    ctrlKey: isKeyboard ? !!e.ctrlKey : null,
+    metaKey: isKeyboard ? !!e.metaKey : null,
+    shiftKey: isKeyboard ? !!e.shiftKey : null,
+    inputType: "inputType" in e ? stable(e.inputType) : null,
+    data: "data" in e ? stable(e.data) : null,
+    isComposing: "isComposing" in e ? stable(e.isComposing) : null,
+    defaultPrevented: e.defaultPrevented,
+    cancelable: e.cancelable,
+    targetRanges: rangeInfo(e),
+    target: nodeDesc(e.target),
+    doc: getDoc(),
+    editorSelection: getEditorSelectionInfo(),
+    domSelection: getDomSelectionInfo()
+  };
+}
+
+function scheduleDeferredRender() {
+  if (loggerModeEl.value !== "deferred") return;
+  clearTimeout(deferredTimer);
+  deferredTimer = setTimeout(() => {
+    renderLog();
+  }, 800);
+}
+
+function recordEvent(e, label) {
+  // Critical: no DOM writes, no stringify, no scroll, no layout reads here.
+  buffer.push(makeEventRecord(e, label));
+  // eventCount is intentionally NOT updated here to avoid DOM writes in the input path.
+  scheduleDeferredRender();
+}
+
+function renderLog() {
+  eventCount.textContent = `Buffered events: ${buffer.length}`;
+  logEl.textContent = buffer.map(x => `${String(x.t).padStart(8)}  ${x.label} ${JSON.stringify(x)}`).join("\n");
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function clearLog() {
+  buffer = [];
+  logEl.textContent = "";
+  eventCount.textContent = "Buffered events: 0";
+}
+
+function removeListeners() {
+  for (const fn of cleanupFns) {
+    try { fn(); } catch {}
+  }
+  cleanupFns = [];
+}
+
+function addListener(target, type, fn, options) {
+  target.addEventListener(type, fn, options);
+  cleanupFns.push(() => target.removeEventListener(type, fn, options));
+}
+
+function installLogger() {
+  if (loggerModeEl.value === "off" || !contentDOM) return;
+
+  const inputTypes = [
+    "keydown",
+    "keypress",
+    "keyup",
+    "beforeinput",
+    "input",
+    "compositionstart",
+    "compositionupdate",
+    "compositionend"
+  ];
+
+  for (const type of inputTypes) {
+    const docFn = e => {
+      const path = e.composedPath?.() ?? [];
+      if (!path.includes(contentDOM) && !contentDOM.contains(e.target)) return;
+      recordEvent(e, `${type}:document-capture`);
     };
+    const editorFn = e => recordEvent(e, `${type}:editor-capture`);
 
-    let attempts = Number(localStorage.getItem("cm-ime-attempts") || 0);
-    let failures = Number(localStorage.getItem("cm-ime-failures") || 0);
-    const history = [];
+    addListener(document, type, docFn, true);
+    addListener(contentDOM, type, editorFn, true);
+  }
 
-    function renderCounts() {
-      document.querySelector("#attempts").textContent = attempts;
-      document.querySelector("#failures").textContent = failures;
-      document.querySelector("#rate").textContent =
-        attempts ? `${((failures / attempts) * 100).toFixed(1)}%` : "0%";
-      localStorage.setItem("cm-ime-attempts", attempts);
-      localStorage.setItem("cm-ime-failures", failures);
-    }
+  const selectionFn = () => {
+    const sel = document.getSelection();
+    if (!sel) return;
+    const anchor = sel.anchorNode?.nodeType === Node.TEXT_NODE ? sel.anchorNode.parentElement : sel.anchorNode;
+    const focus = sel.focusNode?.nodeType === Node.TEXT_NODE ? sel.focusNode.parentElement : sel.focusNode;
+    const inEditor =
+      (anchor instanceof Node && contentDOM.contains(anchor)) ||
+      (focus instanceof Node && contentDOM.contains(focus));
 
-    document.querySelector("#addAttempt").onclick = () => {
-      history.push([attempts, failures]);
-      attempts++;
-      renderCounts();
-    };
-    document.querySelector("#addFailure").onclick = () => {
-      history.push([attempts, failures]);
-      attempts++;
-      failures++;
-      renderCounts();
-    };
-    document.querySelector("#undo").onclick = () => {
-      const prev = history.pop();
-      if (!prev) return;
-      [attempts, failures] = prev;
-      renderCounts();
-    };
-    document.querySelector("#reset").onclick = () => {
-      history.push([attempts, failures]);
-      attempts = 0;
-      failures = 0;
-      renderCounts();
-    };
-    renderCounts();
+    if (!inEditor) return;
 
-    const log = document.querySelector("#log");
-    const t0 = performance.now();
-    function appendLog(type, data = {}) {
-      const ms = (performance.now() - t0).toFixed(1).padStart(8);
-      log.textContent += `${ms}  ${type} ${JSON.stringify(data)}\n`;
-      log.scrollTop = log.scrollHeight;
-    }
-
-    const viewVersion = versionSelect.value;
-    const isCM5 = viewVersion.startsWith("5.");
-
-    document.querySelector("#loadedVersion").textContent =
-      `Loading CodeMirror ${viewVersion}…`;
-
-    window.addEventListener("error", (e) => {
-      document.querySelector("#loadedVersion").innerHTML =
-        `<span class="danger">JavaScript error: ${e.message || "unknown error"}</span>`;
+    buffer.push({
+      t: Number((performance.now() - t0).toFixed(1)),
+      label: "selectionchange",
+      type: "selectionchange",
+      doc: getDoc(),
+      editorSelection: getEditorSelectionInfo(),
+      domSelection: getDomSelectionInfo()
     });
+    scheduleDeferredRender();
+  };
+  addListener(document, "selectionchange", selectionFn, true);
+}
 
-    window.addEventListener("unhandledrejection", (e) => {
-      document.querySelector("#loadedVersion").innerHTML =
-        `<span class="danger">Module load error: ${String(e.reason || "unknown error")}</span>`;
-    });
+async function loadBare(version) {
+  const url = `https://cdn.jsdelivr.net/npm/@codemirror/view@${version}/+esm`;
+  const mod = await import(url);
+  const { EditorView } = mod;
 
-    function loadScript(src) {
-      return new Promise((resolve, reject) => {
-        const s = document.createElement("script");
-        s.src = src;
-        s.onload = resolve;
-        s.onerror = () => reject(new Error(`Failed to load ${src}`));
-        document.head.appendChild(s);
-      });
-    }
+  currentView = new EditorView({
+    doc: "",
+    parent: editorHost
+  });
 
-    function loadCss(href) {
-      return new Promise((resolve, reject) => {
-        const l = document.createElement("link");
-        l.rel = "stylesheet";
-        l.href = href;
-        l.onload = resolve;
-        l.onerror = () => reject(new Error(`Failed to load ${href}`));
-        document.head.appendChild(l);
-      });
-    }
+  return {
+    mode: "Exact Bare",
+    source: url,
+    requestedViewVersion: version,
+    notes: "Only @codemirror/view is imported directly. No separately imported @codemirror/state."
+  };
+}
 
-    try {
-      let getDocText;
-      let clearEditorImpl;
-      let focusEditorImpl;
-      let contentDOM;
-      let getSelectionInfo;
-      let moduleDescription;
+async function loadStandard() {
+  // Single entry point. The module graph is bundled together to avoid duplicate @codemirror/state instances.
+  const url = "https://esm.sh/codemirror@6.0.2?bundle";
+  const mod = await import(url);
+  const { EditorView, basicSetup } = mod;
 
-      let cm5Instance = null;
-      let cm5Wrapper = null;
+  currentView = new EditorView({
+    doc: "",
+    extensions: [basicSetup],
+    parent: editorHost
+  });
 
-      if (isCM5) {
-        const base = `https://cdn.jsdelivr.net/npm/codemirror@${viewVersion}`;
-        await Promise.all([
-          loadCss(`${base}/lib/codemirror.css`),
-          loadScript(`${base}/lib/codemirror.js`)
-        ]);
+  return {
+    mode: "Standard Bundled",
+    source: url,
+    requestedViewVersion: null,
+    notes: "Single bundled codemirror entry point with basicSetup. Exact internal @codemirror/view version is determined by this bundle."
+  };
+}
 
-        const textarea = document.createElement("textarea");
-        textarea.id = "cm5-source";
-        document.querySelector("#editor").appendChild(textarea);
+async function loadEditor() {
+  loadedMeta.textContent = "Loading…";
+  loadedMeta.className = "muted";
 
-        const cm = window.CodeMirror.fromTextArea(textarea, {
-          lineNumbers: false,
-          lineWrapping: true,
-          inputStyle: "contenteditable"
-        });
+  removeListeners();
+  clearTimeout(deferredTimer);
+  deferredTimer = null;
+  clearLog();
 
-        cm5Instance = cm;
-        cm5Wrapper = cm.getWrapperElement();
+  if (currentView) {
+    try { currentView.destroy(); } catch {}
+    currentView = null;
+  }
+  editorHost.replaceChildren();
+  contentDOM = null;
+  t0 = performance.now();
 
-        // Keep a local target for CM5, but actual event logging is also
-        // installed at document capture phase below so hidden/internal
-        // input targets cannot escape the logger.
-        contentDOM =
-          cm5Wrapper.querySelector(".CodeMirror-code") ||
-          cm5Wrapper.querySelector("[contenteditable=true]") ||
-          cm5Wrapper;
+  try {
+    const config = configEl.value;
+    const version = versionEl.value;
+    const meta = config === "bare"
+      ? await loadBare(version)
+      : await loadStandard();
 
-        getDocText = () => cm.getValue();
-        getSelectionInfo = () => {
-          const from = cm.getCursor("from");
-          const to = cm.getCursor("to");
-          return {from, to};
-        };
-        clearEditorImpl = () => {
-          cm.setValue("");
-          cm.focus();
-        };
-        focusEditorImpl = () => cm.focus();
-        moduleDescription = `jsDelivr CodeMirror ${viewVersion}`;
-      } else {
-        const viewUrl = `https://cdn.jsdelivr.net/npm/@codemirror/view@${viewVersion}/+esm`;
-        const {EditorView} = await import(viewUrl);
+    contentDOM = currentView.contentDOM;
+    installLogger();
+    currentView.focus();
 
-        const view = new EditorView({
-          doc: "",
-          parent: document.querySelector("#editor")
-        });
+    const loggerMode = loggerModeEl.value;
+    const metadata = {
+      ...meta,
+      loggerMode,
+      contentDOM: nodeDesc(contentDOM)
+    };
 
-        contentDOM = view.contentDOM;
-        getDocText = () => view.state.doc.toString();
-        getSelectionInfo = () => ({
-          from: view.state.selection.main.from,
-          to: view.state.selection.main.to
-        });
-        clearEditorImpl = () => {
-          view.dispatch({
-            changes: {from: 0, to: view.state.doc.length, insert: ""}
-          });
-          view.focus();
-        };
-        focusEditorImpl = () => view.focus();
-        moduleDescription = `jsDelivr ESM: ${viewUrl}`;
-      }
+    loadedMeta.textContent = JSON.stringify(metadata, null, 2);
 
-      document.querySelector("#loadedVersion").textContent =
-        `Loaded CodeMirror ${viewVersion}`;
+    // Keep URL shareable.
+    const url = new URL(location.href);
+    url.searchParams.set("config", config);
+    url.searchParams.set("logger", loggerMode);
+    if (config === "bare") url.searchParams.set("v", version);
+    else url.searchParams.delete("v");
+    history.replaceState(null, "", url);
+  } catch (err) {
+    loadedMeta.className = "muted danger";
+    loadedMeta.textContent = `Load failed: ${err?.stack || err}`;
+    throw err;
+  }
+}
 
-      function rangeInfo(e) {
-        if (!e.getTargetRanges) return [];
-        try {
-          return [...e.getTargetRanges()].map(r => ({
-            startOffset: r.startOffset,
-            endOffset: r.endOffset,
-            collapsed: r.collapsed,
-            startNode: r.startContainer?.nodeName,
-            endNode: r.endContainer?.nodeName,
-            startClass: r.startContainer?.parentElement?.className || null,
-            endClass: r.endContainer?.parentElement?.className || null
-          }));
-        } catch {
-          return [];
-        }
-      }
+document.querySelector("#loadEditor").addEventListener("click", loadEditor);
 
-      function nodeDesc(node) {
-        if (!node) return null;
-        if (node.nodeType === Node.TEXT_NODE) {
-          const p = node.parentElement;
-          return `#text${p ? ` <${p.tagName.toLowerCase()}.${String(p.className || "").replace(/\s+/g, ".")}>` : ""}`;
-        }
-        if (!(node instanceof Element)) return node.nodeName || String(node);
-        const id = node.id ? `#${node.id}` : "";
-        const cls = node.className && typeof node.className === "string"
-          ? "." + node.className.trim().replace(/\s+/g, ".")
-          : "";
-        return `${node.tagName.toLowerCase()}${id}${cls}`;
-      }
+document.querySelector("#clearEditor").addEventListener("click", () => {
+  if (!currentView) return;
+  currentView.dispatch({
+    changes: { from: 0, to: currentView.state.doc.length, insert: "" }
+  });
+  currentView.focus();
+});
 
-      function eventPathInfo(e) {
-        try {
-          return e.composedPath()
-            .slice(0, 12)
-            .map(nodeDesc)
-            .filter(Boolean);
-        } catch {
-          return [];
-        }
-      }
+document.querySelector("#renderLog").addEventListener("click", renderLog);
 
-      function domSelectionInfo() {
-        const sel = document.getSelection();
-        if (!sel) return null;
-        return {
-          anchorNode: nodeDesc(sel.anchorNode),
-          anchorOffset: sel.anchorOffset,
-          focusNode: nodeDesc(sel.focusNode),
-          focusOffset: sel.focusOffset,
-          isCollapsed: sel.isCollapsed
-        };
-      }
+document.querySelector("#copyLog").addEventListener("click", async () => {
+  const text = buffer.map(x => `${String(x.t).padStart(8)}  ${x.label} ${JSON.stringify(x)}`).join("\n");
+  await navigator.clipboard.writeText(text);
+});
 
-      function belongsToEditor(e) {
-        const path = e.composedPath ? e.composedPath() : [];
-        if (isCM5) {
-          return path.includes(cm5Wrapper) ||
-                 path.some(n => n instanceof Element &&
-                   (n === cm5Wrapper || cm5Wrapper?.contains(n)));
-        }
-        return path.includes(contentDOM) ||
-               path.some(n => n instanceof Element &&
-                 (n === contentDOM || contentDOM?.contains(n)));
-      }
+document.querySelector("#clearLog").addEventListener("click", clearLog);
 
-      function logInputEvent(e, phase = "capture") {
-        if (!belongsToEditor(e)) return;
+window.addEventListener("error", e => {
+  loadedMeta.className = "muted danger";
+  loadedMeta.textContent = `JavaScript error: ${e.message || "unknown error"}`;
+});
 
-        appendLog(`${e.type}:${phase}`, {
-          target: nodeDesc(e.target),
-          currentTarget: nodeDesc(e.currentTarget),
-          inputType: "inputType" in e ? e.inputType : undefined,
-          data: "data" in e ? e.data : undefined,
-          isComposing: "isComposing" in e ? e.isComposing : undefined,
-          defaultPrevented: e.defaultPrevented,
-          cancelable: e.cancelable,
-          targetRanges: rangeInfo(e),
-          path: eventPathInfo(e),
-          doc: getDocText(),
-          editorSelection: getSelectionInfo(),
-          domSelection: domSelectionInfo()
-        });
-      }
+window.addEventListener("unhandledrejection", e => {
+  loadedMeta.className = "muted danger";
+  loadedMeta.textContent = `Unhandled rejection: ${String(e.reason || "unknown error")}`;
+});
 
-      // Most important CM5 improvement:
-      // capture input-related events at document level so CodeMirror 5's
-      // internal input node / hidden textarea / contenteditable path is visible.
-      const inputEventTypes = [
-        "beforeinput",
-        "input",
-        "compositionstart",
-        "compositionupdate",
-        "compositionend",
-        "keydown",
-        "keyup"
-      ];
-
-      for (const type of inputEventTypes) {
-        document.addEventListener(type, e => logInputEvent(e, "document-capture"), true);
-      }
-
-      // Also keep an editor-local capture listener. This helps compare whether
-      // an event reached the visible editing DOM in CM5/CM6.
-      for (const type of inputEventTypes) {
-        contentDOM.addEventListener(type, e => logInputEvent(e, "editor-capture"), true);
-      }
-
-      // CM5-specific state hooks. These do not replace DOM event logging, but
-      // help correlate CodeMirror's internal document/selection updates.
-      if (isCM5 && cm5Instance) {
-        cm5Instance.on("beforeChange", (instance, change) => {
-          appendLog("cm5:beforeChange", {
-            from: change.from,
-            to: change.to,
-            text: change.text,
-            origin: change.origin,
-            doc: instance.getValue(),
-            selection: getSelectionInfo(),
-            domSelection: domSelectionInfo()
-          });
-        });
-
-        cm5Instance.on("change", (instance, change) => {
-          appendLog("cm5:change", {
-            from: change.from,
-            to: change.to,
-            text: change.text,
-            removed: change.removed,
-            origin: change.origin,
-            doc: instance.getValue(),
-            selection: getSelectionInfo(),
-            domSelection: domSelectionInfo()
-          });
-        });
-
-        cm5Instance.on("cursorActivity", instance => {
-          appendLog("cm5:cursorActivity", {
-            doc: instance.getValue(),
-            selection: getSelectionInfo(),
-            domSelection: domSelectionInfo()
-          });
-        });
-      }
-
-      document.addEventListener("selectionchange", () => {
-        const sel = document.getSelection();
-        if (!sel) return;
-
-        // Avoid logging unrelated selection changes outside the editor.
-        const anchorEl = sel.anchorNode?.nodeType === Node.TEXT_NODE
-          ? sel.anchorNode.parentElement
-          : sel.anchorNode;
-        const focusEl = sel.focusNode?.nodeType === Node.TEXT_NODE
-          ? sel.focusNode.parentElement
-          : sel.focusNode;
-
-        const inEditor = isCM5
-          ? ((anchorEl instanceof Node && cm5Wrapper?.contains(anchorEl)) ||
-             (focusEl instanceof Node && cm5Wrapper?.contains(focusEl)))
-          : ((anchorEl instanceof Node && contentDOM?.contains(anchorEl)) ||
-             (focusEl instanceof Node && contentDOM?.contains(focusEl)));
-
-        if (!inEditor) return;
-
-        appendLog("selectionchange", {
-          ...domSelectionInfo(),
-          doc: getDocText(),
-          editorSelection: getSelectionInfo()
-        });
-      });
-
-      document.querySelector("#clearEditor").onclick = () => {
-        clearEditorImpl();
-      };
-
-      document.querySelector("#copySummary").onclick = async () => {
-        const text =
-`CodeMirror iOS Korean IME test
-CodeMirror: ${viewVersion}
-Attempts: ${attempts}
-Failures: ${failures}
-Rate: ${attempts ? ((failures/attempts)*100).toFixed(1) : 0}%
-Test: 백두산이
-Keyboard layout: Danmoum`;
-        await navigator.clipboard.writeText(text);
-      };
-
-      document.querySelector("#copyLog").onclick = async () => {
-        await navigator.clipboard.writeText(log.textContent);
-      };
-      document.querySelector("#clearLog").onclick = () => {
-        log.textContent = "";
-      };
-
-      appendLog("ready", {
-        version: viewVersion,
-        generation: isCM5 ? 5 : 6,
-        source: moduleDescription
-      });
-
-      focusEditorImpl();
-    } catch (err) {
-      const attempted = isCM5
-        ? `https://cdn.jsdelivr.net/npm/codemirror@${viewVersion}`
-        : `https://cdn.jsdelivr.net/npm/@codemirror/view@${viewVersion}/+esm`;
-      document.querySelector("#loadedVersion").innerHTML =
-        `<span class="danger">Failed to load ${viewVersion}: ${String(err)}<br>URL: ${attempted}</span>`;
-      appendLog("load-error", {message: String(err), attempted});
-    }
-  </script>
+// Initial load.
+await loadEditor();
+</script>
 </body>
 </html>
