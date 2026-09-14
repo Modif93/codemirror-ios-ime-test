@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
-  <title>CodeMirror iOS Korean IME Test v7</title>
+  <title>CodeMirror iOS Korean IME Test v7.1</title>
   <style>
     :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color-scheme: light dark; }
     body { margin: 0; padding: 16px; line-height: 1.45; }
@@ -25,7 +25,7 @@
   </style>
 </head>
 <body>
-  <h1>CodeMirror iOS Korean IME Test v7</h1>
+  <h1>CodeMirror iOS Korean IME Test v7.1</h1>
   <div class="muted">Exact Bare vs Standard Bundled · normal vs Backspace override · capture / bubble / microtask tracing</div>
 
   <div class="card">
@@ -83,7 +83,7 @@
     <span id="eventCount" class="pill">Buffered events: 0</span>
   </div>
   <div class="muted" style="margin-bottom:20px">
-    Native only mode test criterion: the second synthetic Backspace should no longer shrink the CodeMirror document during keydown bubble/microtask. Any deletion should instead appear through beforeinput/input.
+    Native only criterion: Backspace keydown should produce keydown:native-only-blocker, should NOT reach editor/document bubble logging, and should not directly shrink the CodeMirror document. Deletion should occur through native beforeinput/input instead.
   </div>
 
   <h2>Input event log</h2>
@@ -128,7 +128,7 @@ function updateModeUi() {
   modeHelp.textContent = standard
     ? (
         backspaceModeEl.value === "native"
-          ? "Standard Bundled + Native only: CodeMirror's Backspace command is intercepted at highest precedence and returns true after preventDefault is deliberately avoided; native beforeinput/input is allowed to drive deletion."
+          ? "Standard Bundled + Native only: a raw capture-phase listener stops synthetic Backspace keydown propagation before CodeMirror keymaps see it, without calling preventDefault(). Native beforeinput/input remains available."
           : "Standard Bundled + Normal basicSetup: default CodeMirror Backspace handling is active."
       )
     : "Exact Bare mode imports only the selected @codemirror/view package. Backspace comparison applies only to Standard Bundled mode.";
@@ -380,35 +380,54 @@ async function loadStandard() {
   // Single bundled entry point prevents duplicate @codemirror/state instances.
   const url = "https://esm.sh/codemirror@6.0.2?bundle";
   const mod = await import(url);
-  const { EditorView, basicSetup, keymap, Prec } = mod;
+  const { EditorView, basicSetup } = mod;
 
   const backspaceMode = backspaceModeEl.value;
-  const extensions = [basicSetup];
-
-  if (backspaceMode === "native") {
-    // Highest-precedence Backspace override.
-    //
-    // Important: returning true tells CodeMirror the key was handled so lower
-    // CodeMirror keymaps (including the default Backspace command) do not run.
-    // We intentionally do NOT call preventDefault here, so WebKit can still
-    // emit/use its native beforeinput/input deletion path.
-    //
-    // This isolates whether CodeMirror's own Backspace command is the source
-    // of the extra state deletion seen in the failing IME sequence.
-    const nativeBackspaceOnly = Prec.highest(
-      keymap.of([{
-        key: "Backspace",
-        run: () => true
-      }])
-    );
-    extensions.unshift(nativeBackspaceOnly);
-  }
 
   currentView = new EditorView({
     doc: "",
-    extensions,
+    extensions: [basicSetup],
     parent: editorHost
   });
+
+  // IMPORTANT:
+  // Do not use a CodeMirror keymap override returning true here.
+  // CM keymap handling may call preventDefault(), which would contaminate
+  // the native-only experiment.
+  //
+  // Instead, in native-only mode install a RAW capture-phase listener on
+  // contentDOM before the diagnostic logger is installed. It blocks only
+  // Backspace keydown propagation from reaching CodeMirror's normal
+  // bubble/keymap path, but deliberately does NOT call preventDefault().
+  //
+  // Browser/WebKit native beforeinput/input should therefore remain possible.
+  if (backspaceMode === "native") {
+    const blocker = e => {
+      if (e.key !== "Backspace") return;
+
+      // No preventDefault().
+      // Stop the synthetic keydown from reaching CodeMirror keymap handlers.
+      e.stopImmediatePropagation();
+
+      buffer.push({
+        t: Number((performance.now() - t0).toFixed(1)),
+        label: "keydown:native-only-blocker",
+        type: "snapshot",
+        key: e.key ?? null,
+        code: e.code ?? null,
+        keyCode: Number.isFinite(e.keyCode) ? e.keyCode : null,
+        eventTimeStamp: Number.isFinite(e.timeStamp) ? Number(e.timeStamp.toFixed(3)) : (e.timeStamp ?? null),
+        defaultPrevented: e.defaultPrevented,
+        doc: getDoc(),
+        editorSelection: getEditorSelectionInfo(),
+        domSelection: getDomSelectionInfo()
+      });
+      scheduleDeferredRender();
+    };
+
+    currentView.contentDOM.addEventListener("keydown", blocker, true);
+    cleanupFns.push(() => currentView?.contentDOM?.removeEventListener("keydown", blocker, true));
+  }
 
   return {
     mode: "Standard Bundled",
@@ -416,7 +435,7 @@ async function loadStandard() {
     requestedViewVersion: null,
     backspaceMode,
     notes: backspaceMode === "native"
-      ? "basicSetup + highest-precedence Backspace override. Lower CodeMirror Backspace commands are blocked; native beforeinput/input remains available."
+      ? "basicSetup + raw capture-phase Backspace propagation blocker. No preventDefault(); CodeMirror keymap path should not see Backspace."
       : "basicSetup with normal CodeMirror Backspace handling."
   };
 }
