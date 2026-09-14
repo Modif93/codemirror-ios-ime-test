@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
-  <title>CodeMirror iOS Korean IME Test v5</title>
+  <title>CodeMirror iOS Korean IME Test v6</title>
   <style>
     :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color-scheme: light dark; }
     body { margin: 0; padding: 16px; line-height: 1.45; }
@@ -25,8 +25,8 @@
   </style>
 </head>
 <body>
-  <h1>CodeMirror iOS Korean IME Test v5</h1>
-  <div class="muted">Exact Bare vs Standard Bundled · logger off / buffer-only / deferred-live</div>
+  <h1>CodeMirror iOS Korean IME Test v6</h1>
+  <div class="muted">Exact Bare vs Standard Bundled · capture / bubble / microtask keydown tracing</div>
 
   <div class="card">
     <div class="row">
@@ -219,6 +219,19 @@ function recordEvent(e, label) {
   scheduleDeferredRender();
 }
 
+function recordSnapshot(label, extra = {}) {
+  buffer.push({
+    t: Number((performance.now() - t0).toFixed(1)),
+    label,
+    type: "snapshot",
+    ...extra,
+    doc: getDoc(),
+    editorSelection: getEditorSelectionInfo(),
+    domSelection: getDomSelectionInfo()
+  });
+  scheduleDeferredRender();
+}
+
 function renderLog() {
   eventCount.textContent = `Buffered events: ${buffer.length}`;
   logEl.textContent = buffer.map(x => `${String(x.t).padStart(8)}  ${x.label} ${JSON.stringify(x)}`).join("\n");
@@ -268,6 +281,38 @@ function installLogger() {
     addListener(document, type, docFn, true);
     addListener(contentDOM, type, editorFn, true);
   }
+
+  // Observe keydown again in bubble phase to see whether CodeMirror or another
+  // handler has called preventDefault() or changed editor state.
+  const keydownBubbleFn = e => {
+    recordEvent(e, "keydown:editor-bubble");
+
+    const key = e.key ?? null;
+    const code = e.code ?? null;
+    const keyCode = Number.isFinite(e.keyCode) ? e.keyCode : null;
+    const eventTimeStamp = Number.isFinite(e.timeStamp) ? Number(e.timeStamp.toFixed(3)) : (e.timeStamp ?? null);
+    const defaultPreventedAtBubble = e.defaultPrevented;
+
+    queueMicrotask(() => {
+      recordSnapshot("keydown:microtask", {
+        key,
+        code,
+        keyCode,
+        eventTimeStamp,
+        defaultPreventedAtBubble,
+        defaultPreventedAfterDispatch: e.defaultPrevented
+      });
+    });
+  };
+  addListener(contentDOM, "keydown", keydownBubbleFn, false);
+
+  // Observe at document bubble too, which is after CodeMirror's contentDOM handler.
+  const docKeydownBubbleFn = e => {
+    const path = e.composedPath?.() ?? [];
+    if (!path.includes(contentDOM) && !contentDOM.contains(e.target)) return;
+    recordEvent(e, "keydown:document-bubble");
+  };
+  addListener(document, "keydown", docKeydownBubbleFn, false);
 
   const selectionFn = () => {
     const sel = document.getSelection();
