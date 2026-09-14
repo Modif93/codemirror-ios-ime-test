@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
-  <title>CodeMirror iOS Korean IME Test v6</title>
+  <title>CodeMirror iOS Korean IME Test v7</title>
   <style>
     :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color-scheme: light dark; }
     body { margin: 0; padding: 16px; line-height: 1.45; }
@@ -25,8 +25,8 @@
   </style>
 </head>
 <body>
-  <h1>CodeMirror iOS Korean IME Test v6</h1>
-  <div class="muted">Exact Bare vs Standard Bundled · capture / bubble / microtask keydown tracing</div>
+  <h1>CodeMirror iOS Korean IME Test v7</h1>
+  <div class="muted">Exact Bare vs Standard Bundled · normal vs Backspace override · capture / bubble / microtask tracing</div>
 
   <div class="card">
     <div class="row">
@@ -54,6 +54,12 @@
         <option value="deferred">Deferred live</option>
       </select>
 
+      <label for="backspaceMode">Backspace</label>
+      <select id="backspaceMode">
+        <option value="normal" selected>Normal basicSetup</option>
+        <option value="native">Native only (CodeMirror Backspace disabled)</option>
+      </select>
+
       <button id="loadEditor">Load editor</button>
     </div>
 
@@ -65,16 +71,19 @@
   <div class="card">
     <div><strong>Recommended sequence</strong></div>
     <div class="muted">
-      1) Standard + Logger Off → 2) Bare + Logger Off → 3) Standard + Buffer only → 4) Bare + Buffer only
+      Compare Standard + Normal basicSetup vs Standard + Native only. Use Buffer only. Then repeat with Logger Off.
     </div>
   </div>
 
   <h2>Editor</h2>
   <div id="editor"></div>
 
-  <div class="row" style="margin:10px 0 20px">
+  <div class="row" style="margin:10px 0 8px">
     <button id="clearEditor">Clear editor</button>
     <span id="eventCount" class="pill">Buffered events: 0</span>
+  </div>
+  <div class="muted" style="margin-bottom:20px">
+    Native only mode test criterion: the second synthetic Backspace should no longer shrink the CodeMirror document during keydown bubble/microtask. Any deletion should instead appear through beforeinput/input.
   </div>
 
   <h2>Input event log</h2>
@@ -91,6 +100,7 @@ const qs = new URLSearchParams(location.search);
 const configEl = document.querySelector("#config");
 const versionEl = document.querySelector("#version");
 const loggerModeEl = document.querySelector("#loggerMode");
+const backspaceModeEl = document.querySelector("#backspaceMode");
 const editorHost = document.querySelector("#editor");
 const loadedMeta = document.querySelector("#loadedMeta");
 const modeHelp = document.querySelector("#modeHelp");
@@ -100,6 +110,9 @@ const logEl = document.querySelector("#log");
 if (qs.get("config")) configEl.value = qs.get("config");
 if (qs.get("v") && [...versionEl.options].some(o => o.value === qs.get("v"))) versionEl.value = qs.get("v");
 if (qs.get("logger")) loggerModeEl.value = qs.get("logger");
+if (qs.get("backspace") && ["normal", "native"].includes(qs.get("backspace"))) {
+  backspaceModeEl.value = qs.get("backspace");
+}
 
 let currentView = null;
 let contentDOM = null;
@@ -111,10 +124,17 @@ let cleanupFns = [];
 function updateModeUi() {
   const standard = configEl.value === "standard";
   versionEl.disabled = standard;
+  backspaceModeEl.disabled = !standard;
   modeHelp.textContent = standard
-    ? "Standard Bundled mode uses a single codemirror bundle. The exact @codemirror/view version is not controlled by this selector."
-    : "Exact Bare mode imports only the selected @codemirror/view package. No separate @codemirror/state package is imported.";
+    ? (
+        backspaceModeEl.value === "native"
+          ? "Standard Bundled + Native only: CodeMirror's Backspace command is intercepted at highest precedence and returns true after preventDefault is deliberately avoided; native beforeinput/input is allowed to drive deletion."
+          : "Standard Bundled + Normal basicSetup: default CodeMirror Backspace handling is active."
+      )
+    : "Exact Bare mode imports only the selected @codemirror/view package. Backspace comparison applies only to Standard Bundled mode.";
 }
+configEl.addEventListener("change", updateModeUi);
+backspaceModeEl.addEventListener("change", updateModeUi);
 configEl.addEventListener("change", updateModeUi);
 updateModeUi();
 
@@ -357,14 +377,36 @@ async function loadBare(version) {
 }
 
 async function loadStandard() {
-  // Single entry point. The module graph is bundled together to avoid duplicate @codemirror/state instances.
+  // Single bundled entry point prevents duplicate @codemirror/state instances.
   const url = "https://esm.sh/codemirror@6.0.2?bundle";
   const mod = await import(url);
-  const { EditorView, basicSetup } = mod;
+  const { EditorView, basicSetup, keymap, Prec } = mod;
+
+  const backspaceMode = backspaceModeEl.value;
+  const extensions = [basicSetup];
+
+  if (backspaceMode === "native") {
+    // Highest-precedence Backspace override.
+    //
+    // Important: returning true tells CodeMirror the key was handled so lower
+    // CodeMirror keymaps (including the default Backspace command) do not run.
+    // We intentionally do NOT call preventDefault here, so WebKit can still
+    // emit/use its native beforeinput/input deletion path.
+    //
+    // This isolates whether CodeMirror's own Backspace command is the source
+    // of the extra state deletion seen in the failing IME sequence.
+    const nativeBackspaceOnly = Prec.highest(
+      keymap.of([{
+        key: "Backspace",
+        run: () => true
+      }])
+    );
+    extensions.unshift(nativeBackspaceOnly);
+  }
 
   currentView = new EditorView({
     doc: "",
-    extensions: [basicSetup],
+    extensions,
     parent: editorHost
   });
 
@@ -372,7 +414,10 @@ async function loadStandard() {
     mode: "Standard Bundled",
     source: url,
     requestedViewVersion: null,
-    notes: "Single bundled codemirror entry point with basicSetup. Exact internal @codemirror/view version is determined by this bundle."
+    backspaceMode,
+    notes: backspaceMode === "native"
+      ? "basicSetup + highest-precedence Backspace override. Lower CodeMirror Backspace commands are blocked; native beforeinput/input remains available."
+      : "basicSetup with normal CodeMirror Backspace handling."
   };
 }
 
@@ -408,6 +453,7 @@ async function loadEditor() {
     const metadata = {
       ...meta,
       loggerMode,
+      backspaceMode: config === "standard" ? backspaceModeEl.value : "n/a",
       contentDOM: nodeDesc(contentDOM)
     };
 
@@ -417,8 +463,13 @@ async function loadEditor() {
     const url = new URL(location.href);
     url.searchParams.set("config", config);
     url.searchParams.set("logger", loggerMode);
-    if (config === "bare") url.searchParams.set("v", version);
-    else url.searchParams.delete("v");
+    if (config === "standard") {
+      url.searchParams.set("backspace", backspaceModeEl.value);
+      url.searchParams.delete("v");
+    } else {
+      url.searchParams.set("v", version);
+      url.searchParams.delete("backspace");
+    }
     history.replaceState(null, "", url);
   } catch (err) {
     loadedMeta.className = "muted danger";
